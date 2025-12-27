@@ -61,3 +61,7 @@ Asimismo, se ha reutilizado en gran medida el contexto IAM (Identity and Access 
 
 ![PharmaCold_Track_Class_Diagram.png](assets/PharmaCold_Track_Class_Diagram.png)
 
+### 4.2. Diagrama de Base de Datos
+
+![PharmaCold_Track_DB_Diagram.png](assets/PharmaCold_Track_DB_Diagram.png)
+
