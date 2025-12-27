@@ -1,0 +1,264 @@
+@startuml
+' === CONFIGURACIÓN VISUAL ===
+skinparam linetype ortho
+skinparam handwritten false
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam roundcorner 10
+
+skinparam class {
+    BackgroundColor White
+    ArrowColor #2C3E50
+    BorderColor #2C3E50
+    FontSize 11
+    AttributeFontSize 10
+}
+
+' Colores Semánticos DDD
+skinparam class {
+    BackgroundColor<<Aggregate Root>> #FFF2CC
+    BorderColor<<Aggregate Root>> #D6B656
+    BackgroundColor<<Entity>> #E1D5E7
+    BorderColor<<Entity>> #9673A6
+    BackgroundColor<<Value Object>> #DAE8FC
+    BorderColor<<Value Object>> #6C8EBF
+    BackgroundColor<<Domain Event>> #F8CECC
+    BorderColor<<Domain Event>> #B85450
+    BackgroundColor<<Domain Service>> #D5E8D4
+    BorderColor<<Domain Service>> #82B366
+    BackgroundColor<<Application Service>> #F5F5F5
+    BorderColor<<Application Service>> #666666
+    BackgroundColor<<Repository>> #E1D5E7
+    BorderColor<<Repository>> #9673A6
+    BackgroundColor<<Interface>> #F5F5F5
+}
+
+' ==========================================================
+' BOUNDED CONTEXT: IAM (IDENTITY & ACCESS MANAGEMENT)
+' ==========================================================
+package "Context: IAM (Security)" {
+
+    class User <<Aggregate Root>> {
+        - Long id
+        - AccountStatus accountStatus
+        - Integer failedLoginAttempts
+        - Boolean hasProfile
+        - LocalDateTime lastLoginAt
+        --
+        ' Factories / Constructors
+        + {static} User create(SignUpCommand command)
+        + {static} User createAdmin(SeedSuperAdminCommand command)
+
+        ' Domain Logic
+        + void login(String rawPassword, HashingService hasher)
+        + void addRole(Role role)
+        + void activateAccount()
+        + void lockAccount()
+        + void changePassword(String newPass)
+
+        ' Events
+        + UserCreatedEvent publishCreated()
+    }
+
+    class Role <<Entity>> {
+        - Long id
+        - Roles name
+        --
+        + {static} Role from(Roles name)
+        + {static} Role getDefaultRole()
+    }
+
+    class EmailAddress <<Value Object>> {
+        - String value
+        + {static} EmailAddress of(String email)
+    }
+
+    class Password <<Value Object>> {
+        - String value
+        + boolean match(String raw)
+    }
+
+    enum AccountStatus {
+        ACTIVE
+        LOCKED
+        PENDING_ACTIVATION
+    }
+
+    interface UserRepository <<Repository>> {
+        + Optional<User> findByEmail(EmailAddress email)
+        + boolean existsByEmail(EmailAddress email)
+    }
+
+    interface TokenService <<Interface>> {
+        + String generateToken(Authentication auth)
+        + boolean validateToken(String token)
+    }
+
+    interface HashingService <<Interface>> {
+        + String encode(CharSequence raw)
+        + boolean matches(CharSequence raw, String encoded)
+    }
+
+    ' Relaciones Internas IAM
+    User *-- EmailAddress : "identidad"
+    User *-- Password : "credencial"
+    User *-- AccountStatus : "estado"
+    User o-- "1..*" Role : "autorización"
+
+    ' Dependencias de comportamiento
+    User ..> HashingService : "usa para validar pass"
+}
+
+' ==========================================================
+' BOUNDED CONTEXT: SHIPPING (CORE DOMAIN)
+' ==========================================================
+package "Context: Shipping" {
+
+    class Shipment <<Aggregate Root>> {
+        - Long id
+        - UUID trackingId
+        - String contactEmail
+        - ShipmentStatus status
+        - Long version
+        - LocalDateTime createdAt
+        - LocalDateTime updatedAt
+        --
+        + {static} Shipment create(String desc, RouteInfo route, TemperatureRange limits, String email)
+        + void startTransport()
+        + void completeDelivery()
+        + void breachColdChain(Double recordedTemp, LocalDateTime at)
+        + boolean isTrackable()
+        + ShipmentSnapshot toSnapshot()
+    }
+
+    class TemperatureRange <<Value Object>> {
+        - Double minCelsius
+        - Double maxCelsius
+        --
+        + {static} TemperatureRange of(Double min, Double max)
+        + boolean isValidRange()
+        + boolean isSafe(Double temperature)
+        + String toString()
+    }
+
+    class RouteInfo <<Value Object>> {
+        - String origin
+        - String destination
+        - LocalDateTime estimatedArrival
+        --
+        + {static} RouteInfo of(String from, String to)
+    }
+
+    enum ShipmentStatus {
+        CREATED
+        IN_TRANSIT
+        DELIVERED
+        COMPROMISED
+    }
+
+    interface ShipmentRepository <<Repository>> {
+        + Optional<Shipment> findByTrackingId(UUID trackingId)
+        + Shipment save(Shipment shipment)
+    }
+
+    ' Relaciones Internas Shipping
+    Shipment *-- TemperatureRange : "reglas de calidad"
+    Shipment *-- RouteInfo : "datos ruta"
+    Shipment *-- ShipmentStatus : "estado actual"
+}
+
+' ==========================================================
+' BOUNDED CONTEXT: TELEMETRY (SUPPORTING)
+' ==========================================================
+package "Context: Telemetry" {
+
+    class TelemetryRecord <<Aggregate Root>> {
+        - Long id
+        - UUID shipmentTrackingId
+        - Double temperature
+        - LocalDateTime timestamp
+        --
+        + {static} TelemetryRecord record(UUID trackingId, Double temp, GeoLocation loc)
+    }
+
+    class GeoLocation <<Value Object>> {
+        - Double latitude
+        - Double longitude
+        --
+        + {static} GeoLocation of(Double lat, Double lon)
+        + boolean isValid()
+    }
+
+    class ColdChainEvaluator <<Domain Service>> {
+        --
+        + void inspect(Shipment shipment, TelemetryRecord record)
+    }
+
+    interface TelemetryRepository <<Repository>> {
+        + TelemetryRecord save(TelemetryRecord record)
+        + List<TelemetryRecord> findAllByShipment(UUID trackingId)
+    }
+
+    ' Relaciones Internas Telemetry
+    TelemetryRecord *-- GeoLocation : "ubicación"
+    ColdChainEvaluator ..> Shipment : "1. lee configuración"
+    ColdChainEvaluator ..> TelemetryRecord : "2. valida lectura"
+}
+
+' ==========================================================
+' SHARED KERNEL & EVENTS
+' ==========================================================
+package "Shared Kernel / Events" {
+    class ColdChainCompromisedEvent <<Domain Event>> {
+        - UUID shipmentTrackingId
+        - Double recordedTemperature
+        - LocalDateTime occurredOn
+    }
+
+    class UserCreatedEvent <<Domain Event>> {
+        - String userId
+        - String email
+        - String activationToken
+    }
+}
+
+' ==========================================================
+' CONTEXT: NOTIFICATION (GENERIC)
+' ==========================================================
+package "Context: Notification" {
+    interface NotificationPort <<Interface>> {
+        + void sendAlert(String recipient, String subject, String body)
+    }
+}
+
+' ==========================================================
+' RELACIONES ENTRE CONTEXTOS (COUPLING)
+' ==========================================================
+
+' 1. Eventos de Dominio
+ColdChainEvaluator ..> ColdChainCompromisedEvent : "publica si falla"
+User ..> UserCreatedEvent : "publica al registrarse"
+
+' 2. Reacciones a Eventos
+Shipment ..> ColdChainCompromisedEvent : "consume"
+NotificationPort <.. "Infrastructure: EmailAdapter" : "implementa"
+
+' 3. Relación IAM -> Shipping (Lógica)
+' Nota: No hay relación directa de clases, pero el Shipment guarda
+' el 'contactEmail' que conceptualmente es el ID del User.
+Shipment ..> EmailAddress : "usa formato de"
+
+note bottom of User
+  Aggregate Root de Seguridad.
+  Maneja autenticación y roles.
+end note
+
+note right of ColdChainEvaluator
+  Orquesta la lógica:
+  Si temp < min O temp > max:
+  -> Dispara Evento
+  -> Shipment pasa a COMPROMISED
+  -> Notificación enviada
+end note
+
+@enduml

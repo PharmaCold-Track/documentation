@@ -46,9 +46,18 @@ Este diagrama ilustra el panorama general del sistema PharmaCold Track, identifi
 #### 3.2. Diagrama de contenedores (C4 - Nivel 2)
 Se detalla la arquitectura tecnológica de la solución, separando las responsabilidades en una Single Page Application (SPA) para el frontend, una API REST para el backend y una base de datos relacional.
 
-![PharmaCold_Tra ck_Container_Diagram.png](assets/PharmaCold_Track_Container_Diagram.png)
+![PharmaCold_Track_Container_Diagram.png](assets/PharmaCold_Track_Container_Diagram.png)
 
 #### 3.3. Diagrama de componentes (C4 - Nivel 3)
 Detalle del contenedor Api backend. Aquí se evidencia la separación de capas propuesta por DDD
 
-![PharmaCold_Tra ck_Components_Diagram.png](assets/PharmaCold_Track_Components_Diagram.png)
+![PharmaCold_Track_Components_Diagram.png](assets/PharmaCold_Track_Components_Diagram.png)
+
+Asimismo, se ha reutilizado en gran medida el contexto IAM (Identity and Access Management) de un proyecto anterior, con el fin de gestionar la autenticación y autorización de usuarios en el sistema; y a su vez demostrar la funcionalidad del tracking de envios farmacéuticos.
+
+### 4. Diseño de la solución (Tactical DDD)
+
+### 4.1. Diagrama de Clases
+
+![PharmaCold_Track_Class_Diagram.png](assets/PharmaCold_Track_Class_Diagram.png)
+

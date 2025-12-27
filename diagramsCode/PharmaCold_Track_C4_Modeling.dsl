@@ -1,87 +1,124 @@
 workspace "PharmaCold Track" "Sistema de control para logística farmacéutica" {
 
     model {
-        #actores
-        operador = person "Operador logístico" "Responsable de gestionar envíos y recibir alertas"
-        sensor = person "Sensor IoT / Transportista" "Dispositivo o app que envía ubicación y temperatura."
+        # actores
+        operador = person "Operador Logístico" "Gestiona envíos y recibe alertas."
+        sensor = person "Sensor IoT" "Envía telemetría (ubicación/temperatura)."
 
-        #Sistemas externos
-        emailSystem = softwareSystem "Sistema de correo" "Servidor SMTP externo (Gmail) para envío de alertas." "External System"
+        # sistemas externos
+        emailSystem = softwareSystem "Sistema de Correo" "Servidor SMTP (SendGrid/Gmail)." "External System"
 
         # sistema de software
-        pharmaSystem = softwareSystem "PharmaCold Track" "Sistema de gestión de cadena de frío" {
-            
+        pharmaSystem = softwareSystem "PharmaCold Track" "Sistema de gestión de cadena de frío." {
+
             # contenedores
-            webApp = container "Aplicación web" "Provee la interfaz de administración y visualización." "Angular" "Web Browser"
-            
-            backendCore = container "API Backend" "API REST que centraliza la lógica de negocio y reglas de dominio." "Java Spring Boot" {
-                
-                # componentes - nivell 3
-                group "Capa de presentación" {
-                    shipmentController = component "Shipment controller" "Expone endpoints para gestión de envíos." "Spring MVC Rest Controller"
-                    telemetryController = component "Telemetry controller" "Recibe lecturas de sensores." "Spring MVC Rest Controller"
+            webApp = container "Web App (SPA)" "Dashboard de monitoreo." "Angular/React" "Web Browser"
+            database = container "Base de datos" "Almacena datos relacionales y logs de auditoría." "PostgreSQL" "Database"
+
+            backendCore = container "Backend Core" "API REST con arquitectura hexagonal y CQRS lógico." "Java Spring Boot" {
+
+                #Componentes
+
+                # CAPA DE PRESENTACIÓN (Entrada)
+                group "Presentation Layer (Web Adapters)" {
+                    shipmentController = component "ShipmentController" "Recibe peticiones HTTP y despacha Commands/Queries." "Spring RestController"
+                    telemetryController = component "TelemetryController" "Recibe POSTs de sensores y despacha Commands." "Spring RestController"
                 }
 
-                group "Capa de aplicación y dominio" {
-                    shipmentService = component "Shipment service" "Orquesta la creación y actualización de envíos." "Spring Service"
-                    telemetryService = component "Telemetry service" "Procesa entrada de sensores y coordina alertas." "Spring Service"
-                    coldChainPolicy = component "Cold chain policy" "Evaluador de reglas de negocio (Invariantes de temperatura)." "Domain Service"
-                    notificationService = component "Notification service" "Gestiona la composición y envío de alertas." "Spring Service"
+                #CAPA DE APLICACIÓN (Orquestación - CQRS)
+                group "Application Layer (Command/Query Handlers)" {
+                    # Write Side (Comandos)
+                    createShipmentHandler = component "CreateShipmentCommandHandler" "Maneja la creación del envío. Coordina con Factory." "Spring Component"
+                    registerTelemetryHandler = component "RegisterTelemetryCommandHandler" "Maneja la entrada de datos. Coordina persistencia y validación." "Spring Component"
+
+                    # Read Side (Consultas)
+                    getShipmentQueryHandler = component "GetShipmentQueryHandler" "Recupera datos optimizados para lectura." "Spring Component"
+
+                    # Event Side (Reacción)
+                    alertEventHandler = component "ColdChainCompromisedHandler" "Escucha el evento de dominio y orquesta la notificación." "Spring EventListener"
                 }
 
-                group "Capa de infraestructura" {
-                    shipmentRepo = component "Shipment repository" "Abstracción de persistencia de envíos." "Spring Data JPA"
-                    telemetryRepo = component "Telemetry repository" "Abstracción de persistencia de lecturas." "Spring Data JPA"
+                # CAPA DE DOMINIO
+                group "Domain Layer" {
+                    shipmentAgg = component "Shipment Aggregate" "Entidad raíz que encapsula estado y reglas de cambio." "Java Object"
+                    coldChainEvaluator = component "ColdChainEvaluator" "Domain Service. Valida si la temperatura cumple las reglas." "Domain Service"
+                    domainEvents = component "DomainEventPublisher" "Mecanismo para publicar eventos (ej. ColdChainCompromised)." "ApplicationEventPublisher"
+                }
+
+                # CAPA DE INFRAESTRUCTURA
+                group "Infrastructure Layer (Persistence Y Adapters)" {
+                    shipmentRepo = component "JpaShipmentRepository" "Implementación de persistencia con Hibernate." "Spring Data JPA"
+                    telemetryRepo = component "JpaTelemetryRepository" "Implementación de persistencia de telemetría." "Spring Data JPA"
+                    emailAdapter = component "EmailNotificationAdapter" "Implementación del puerto de notificaciones." "JavaMailSender"
                 }
             }
-
-            database = container "Base de datos" "Almacena datos relacionales y logs de auditoría." "PostgreSQL" "Database"
         }
 
-        # Relaciones del diagram de contexto
-        operador -> webApp "Visualiza tableros y gestiona envíos usando"
-        sensor -> backendCore "Envía telemetría (POST) usando" "HTTPS/JSON"
-        backendCore -> emailSystem "Envía alertas críticas usando" "SMTP/API"
-        emailSystem -> operador "Entrega correos de alerta a"
+        # RELACIONES DEL CONTEXTO
+        operador -> pharmaSystem "Usa para gestionar flota"
+        sensor -> pharmaSystem "Envía datos a"
+        pharmaSystem -> emailSystem "Envía alertas críticas a través de"
+        emailSystem -> operador "Entrega correos a"
 
-        # Relaciones de contenedores
-        webApp -> backendCore "Realiza llamadas API a" "HTTPS/JSON"
-        backendCore -> database "Lee y escribe datos en" "JDBC/SQL"
+        # RELACIONES DE CONTENEDORES
+        operador -> webApp "Visita dashboard en"
+        webApp -> backendCore "API Calls (JSON/HTTPS)"
+        sensor -> backendCore "API Calls (JSON/HTTPS)"
+        backendCore -> database "Lee/Escribe (JDBC)"
+        backendCore -> emailSystem "Envía correos (SMTP)"
 
-        # Relaciones de componentes
-        # Flujo de gestión de envíos
-        webApp -> shipmentController "Solicita creación/consulta de envíos"
-        shipmentController -> shipmentService "Delega lógica a"
-        shipmentService -> shipmentRepo "Persiste estado en"
-        
-        # Flujo de telemetría y alertas
-        sensor -> telemetryController "Envía datos periódicos"
-        telemetryController -> telemetryService "Pasa datos crudos a"
-        telemetryService -> telemetryRepo "Guarda histórico en"
-        telemetryService -> shipmentRepo "Consulta límites del envío en"
-        telemetryService -> coldChainPolicy "Solicita evaluación de integridad a"
-        
-        # Logica de cambio de estado y notificación
-        coldChainPolicy -> shipmentRepo "Actualiza estado a COMPROMISED si falla validación"
-        telemetryService -> notificationService "Solicita envío de alerta si la política falló"
-        notificationService -> emailSystem "Despacha correo vía"
-        
-        shipmentRepo -> database "SQL"
-        telemetryRepo -> database "SQL"
+        # RELACIONES DE COMPONENTES
+
+        # Flujo de lLectura (Query)
+        webApp -> shipmentController "GET /shipments/{id}"
+        shipmentController -> getShipmentQueryHandler "Ejecuta GetShipmentByIdQuery"
+        getShipmentQueryHandler -> shipmentRepo "Lee proyección"
+        shipmentRepo -> database "Select SQL"
+
+        # flujo de escritura (Command)
+        webApp -> shipmentController "POST /shipments"
+        shipmentController -> createShipmentHandler "Despacha CreateShipmentCommand"
+        createShipmentHandler -> shipmentAgg "Invoca Factory"
+        createShipmentHandler -> shipmentRepo "Guarda estado"
+
+        #flujo crítico (Command)
+        sensor -> telemetryController "POST /telemetry"
+        telemetryController -> registerTelemetryHandler "Despacha RegisterTelemetryCommand"
+
+        # Orquestación del Handler
+        registerTelemetryHandler -> telemetryRepo "Persiste lectura inicial"
+        registerTelemetryHandler -> shipmentRepo "Busca Shipment por UUID"
+        registerTelemetryHandler -> coldChainEvaluator "Invoca inspect(shipment, reading)"
+
+        # Lógica del dominio y evento
+        coldChainEvaluator -> domainEvents "Publica ColdChainCompromisedEvent (si falla)"
+
+        # Reacción síncrona
+        domainEvents -> alertEventHandler "Dispara listener"
+        alertEventHandler -> shipmentRepo "Actualiza estado a COMPROMISED"
+        alertEventHandler -> emailAdapter "Invoca envío de alerta"
+        emailAdapter -> emailSystem "Envía SMTP"
+
+        # Conexiones BDD componentes
+        shipmentRepo -> database "Insert/Update"
+        telemetryRepo -> database "Insert"
     }
 
     views {
+        # Vista Nivel 1
         systemContext pharmaSystem "Contexto" "Diagrama de contexto del sistema." {
             include *
             autoLayout lr
         }
 
+        # Vista Nivel 2
         container pharmaSystem "Contenedores" "Diagrama de contenedores del sistema." {
             include *
             autoLayout lr
         }
 
-        component backendCore "Componentes" "Diagrama de componentes del núcleo de servicios." {
+        # Vista Nivel 3
+        component backendCore "Componentes_CQRS" "Diagrama de componentes detallando CQRS y separación de capas." {
             include *
             autoLayout tb
         }
