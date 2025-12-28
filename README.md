@@ -68,3 +68,59 @@ Asimismo, se ha reutilizado en gran medida el contexto IAM (Identity and Access 
 
 ![PharmaCold_Track_DB_Diagram.png](assets/PharmaCold_Track_DB_Diagram.png)
 
+### 4.3. Especificación de API REST
+
+#### 4.3.1. Módulo IAM (Seguridad y Usuarios)
+Basado en el código fuente que he desarrollado previamente para gestión de usuarios y autenticación JWT.
+
+##### A. Autenticación (AuthenticationController)
+**Prefijo:** `/api/v1/authentication`
+
+| Método   | Endpoint                | Descripción                            | Body (Request)                                             | Respuesta Exitosa (200/201)                   |
+|:---------|:------------------------|:---------------------------------------|:-----------------------------------------------------------|:----------------------------------------------|
+| **POST** | `/sign-up`              | Registro de nuevo usuario.             | `{ "email": "...", "username": "...", "password": "..." }` | **UserResource** (JSON con ID, email, roles)  |
+| **POST** | `/sign-in`              | Inicio de sesión y obtención de Token. | `{ "email": "...", "password": "..." }`                    | **AuthenticatedUserResource** (incluye token) |
+| **POST** | `/forgot-password`      | Inicia recuperación de contraseña.     | `?email=usuario@example.com` (Query Param)                 | **200 OK** (Sin contenido)                    |
+| **POST** | `/reset-password`       | Cambia la contraseña usando token.     | `{ "resetToken": "...", "newPassword": "..." }`            | **ResetCompletedPasswordResource**            |
+| **POST** | `/set-initial-password` | Activa cuenta creada por admin.        | `{ "activationToken": "...", "password": "..." }`          | **SetCompletedInitialPasswordResource**       |
+| **POST** | `/resend-activation`    | Reenvía token de activación.           | `?userId=...` (Query Param)                                | **200 OK** (Sin contenido)                    |
+| **GET**  | `/me`                   | Obtiene perfil del usuario logueado.   | Header Authorization: `Bearer {token}`                     | **UserResource**                              |
+
+#### B. Gestión de usuarios (UserController)
+**Prefijo:** `/api/v1/users`
+
+| Método   | Endpoint    | Descripción                       | Body (Request)                                                                        | Respuesta Exitosa              |
+|:---------|:------------|:----------------------------------|:--------------------------------------------------------------------------------------|:-------------------------------|
+| **GET**  | `/`         | Lista todos los usuarios (Admin). | N/A                                                                                   | `List<UserResource>`           |
+| **POST** | `/`         | Crea usuario administrativo.      | `{ "email": "...", "username": "...", "roles": ["ROLE_ADMIN"], "districtId": "..." }` | **UserResource** (Created 201) |
+| **GET**  | `/{userId}` | Obtiene usuario por ID.           | N/A                                                                                   | **UserResource**               |
+
+#### C. Roles (RolesController)
+**Prefijo:** `/api/v1/roles`
+
+| Método  | Endpoint | Descripción              | Body  | Respuesta            |
+|:--------|:---------|:-------------------------|:------|:---------------------|
+| **GET** | `/`      | Lista roles disponibles. | N/A   | `List<RoleResource>` |
+
+### 4.4.2. Módulo Shipping (Logística Core)
+Basado en mi diseño DDD y Diagrama de clases.
+
+#### A. Gestión de Envíos (ShipmentController)
+**Prefijo:** `/api/v1/shipments`
+
+| Método     | Endpoint          | Descripción                              | Body (Request DTO)                                                                                                                                                                                             | Respuesta (Response DTO)                                                             |
+|:-----------|:------------------|:-----------------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:-------------------------------------------------------------------------------------|
+| **POST**   | `/`               | Crear envío                              | `{ "description": "Vacunas Pfizer", "origin": "Lima", "destination": "Cusco", "minTemperature": 2.0, "maxTemperature": 8.0, "contactEmail": "admin@hospital.com", "estimatedArrival": "2023-12-31T10:00:00" }` | `{ "id": 1, "trackingId": "UUID", "status": "CREATED", ... }`                        |
+| **GET**    | `/`               | Listar (Filtros)                         | Query Params: `?status=IN_TRANSIT&fromDate=2023-01-01`                                                                                                                                                         | `List<ShipmentResponse>`                                                             |
+| **GET**    | `/{id}`           | Detalle envío                            | N/A                                                                                                                                                                                                            | `{ "id": 1, "status": "IN_TRANSIT", "telemetryHistory": [...], "currentTemp": 5.5 }` |
+| **PUT**    | `/{id}`           | Actualizar (Solo si `status == CREATED`) | `{ "description": "...", "minTemperature": 2.0, "maxTemperature": 8.0 }`                                                                                                                                       | **ShipmentResponse** actualizado.                                                    |
+| **POST**   | `/{id}/departure` | Registrar salida                         | N/A (Opcional: `{ "inspectorId": "..." }`)                                                                                                                                                                     | **200 OK** (Cambio de estado a IN_TRANSIT)                                           |
+| **POST**   | `/{id}/delivery`  | Registrar entrega                        | `{ "recipientSignature": "...", "notes": "Recibido conforme" }`                                                                                                                                                | **200 OK** (Cambio de estado a DELIVERED)                                            |
+| **DELETE** | `/{id}`           | Cancelar                                 | N/A                                                                                                                                                                                                            | **204 No Content** (Cambio de estado a CANCELLED)                                    |
+
+#### B. Telemetría (TelemetryController)
+**Prefijo:** `/api/v1/telemetry`
+
+| Método   | Endpoint | Descripción     | Body (Request DTO)                                                                                                                         | Respuesta                                     |
+|:---------|:---------|:----------------|:-------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------|
+| **POST** | `/`      | Ingesta de Dato | `{ "shipmentTrackingId": "UUID...", "latitude": -12.0431, "longitude": -77.0282, "temperature": 5.4, "timestamp": "2023-10-27T10:05:00" }` | **201 Created** (Devuelve el ID del registro) |
