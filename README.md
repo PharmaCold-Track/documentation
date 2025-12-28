@@ -80,27 +80,6 @@ Basado en el código fuente que he desarrollado previamente para gestión de usu
 |:---------|:------------------------|:---------------------------------------|:-----------------------------------------------------------|:----------------------------------------------|
 | **POST** | `/sign-up`              | Registro de nuevo usuario.             | `{ "email": "...", "username": "...", "password": "..." }` | **UserResource** (JSON con ID, email, roles)  |
 | **POST** | `/sign-in`              | Inicio de sesión y obtención de Token. | `{ "email": "...", "password": "..." }`                    | **AuthenticatedUserResource** (incluye token) |
-| **POST** | `/forgot-password`      | Inicia recuperación de contraseña.     | `?email=usuario@example.com` (Query Param)                 | **200 OK** (Sin contenido)                    |
-| **POST** | `/reset-password`       | Cambia la contraseña usando token.     | `{ "resetToken": "...", "newPassword": "..." }`            | **ResetCompletedPasswordResource**            |
-| **POST** | `/set-initial-password` | Activa cuenta creada por admin.        | `{ "activationToken": "...", "password": "..." }`          | **SetCompletedInitialPasswordResource**       |
-| **POST** | `/resend-activation`    | Reenvía token de activación.           | `?userId=...` (Query Param)                                | **200 OK** (Sin contenido)                    |
-| **GET**  | `/me`                   | Obtiene perfil del usuario logueado.   | Header Authorization: `Bearer {token}`                     | **UserResource**                              |
-
-#### B. Gestión de usuarios (UserController)
-**Prefijo:** `/api/v1/users`
-
-| Método   | Endpoint    | Descripción                       | Body (Request)                                                                        | Respuesta Exitosa              |
-|:---------|:------------|:----------------------------------|:--------------------------------------------------------------------------------------|:-------------------------------|
-| **GET**  | `/`         | Lista todos los usuarios (Admin). | N/A                                                                                   | `List<UserResource>`           |
-| **POST** | `/`         | Crea usuario administrativo.      | `{ "email": "...", "username": "...", "roles": ["ROLE_ADMIN"], "districtId": "..." }` | **UserResource** (Created 201) |
-| **GET**  | `/{userId}` | Obtiene usuario por ID.           | N/A                                                                                   | **UserResource**               |
-
-#### C. Roles (RolesController)
-**Prefijo:** `/api/v1/roles`
-
-| Método  | Endpoint | Descripción              | Body  | Respuesta            |
-|:--------|:---------|:-------------------------|:------|:---------------------|
-| **GET** | `/`      | Lista roles disponibles. | N/A   | `List<RoleResource>` |
 
 ### 4.4.2. Módulo Shipping (Logística Core)
 Basado en mi diseño DDD y Diagrama de clases.
@@ -124,3 +103,5 @@ Basado en mi diseño DDD y Diagrama de clases.
 | Método   | Endpoint | Descripción     | Body (Request DTO)                                                                                                                         | Respuesta                                     |
 |:---------|:---------|:----------------|:-------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------|
 | **POST** | `/`      | Ingesta de Dato | `{ "shipmentTrackingId": "UUID...", "latitude": -12.0431, "longitude": -77.0282, "temperature": 5.4, "timestamp": "2023-10-27T10:05:00" }` | **201 Created** (Devuelve el ID del registro) |
+
+
